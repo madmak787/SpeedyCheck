@@ -334,6 +334,47 @@ html.has-brand-cursor.brand-cursor-on .brand-cursor-ring {
   opacity: 1;
 }
 
+.legal-copy p,
+.legal-copy ul,
+.legal-copy li {
+  color: var(--muted-foreground);
+}
+
+.legal-copy p {
+  margin-top: 0.85rem;
+  line-height: 1.65;
+}
+
+.legal-copy h2 {
+  margin-top: 2rem;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.legal-copy h3 {
+  margin-top: 1.25rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.legal-copy ul {
+  margin-top: 0.75rem;
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+
+.legal-copy li {
+  margin-top: 0.4rem;
+  line-height: 1.6;
+}
+
+.legal-copy code {
+  font-size: 0.85em;
+  color: var(--foreground);
+}
+
 @media (pointer: coarse) {
   .brand-cursor-dot,
   .brand-cursor-ring {

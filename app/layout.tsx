@@ -1,9 +1,9 @@
 import type React from "react"
 import type { Metadata, Viewport } from "next"
 import { Geist, Geist_Mono, Pacifico } from "next/font/google"
-import { Analytics } from "@vercel/analytics/next"
 import PwaRegister from "@/components/pwa-register"
 import BrandCursor from "@/components/brand-cursor"
+import CookieConsent from "@/components/cookie-consent"
 import "./globals.css"
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-geist-sans" })
@@ -55,7 +55,7 @@ export default function RootLayout({
         {children}
         <BrandCursor />
         <PwaRegister />
-        <Analytics />
+        <CookieConsent />
       </body>
     </html>
   )

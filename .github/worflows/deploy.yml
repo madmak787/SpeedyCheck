@@ -1,0 +1,56 @@
+name: Build & Deploy SpeedyCheck
+
+on:
+  push:
+    branches: [master, main, production]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js (LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Export Next public env to job
+        run: |
+          case "${GITHUB_REF_NAME}" in
+            main|master|production|Production)
+              echo "NEXT_PUBLIC_APP_URL=https://tool.khanamir.me/speedycheck" >> "$GITHUB_ENV"
+              ;;
+          esac
+
+      - name: Install deps (CI)
+        run: npm install --force
+
+      - name: Build (Next static export)
+        run: npm run build
+
+      - name: Set target path
+        id: vars
+        run: |
+          case "${GITHUB_REF_NAME}" in
+            master|main|production|Production) echo "DIR=/domains/khanamir.me/public_html/tool/speedycheck/" >> $GITHUB_OUTPUT ;;
+          esac
+
+      - name: Deploy via FTPS
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          local-dir: ./out/
+          server-dir: ${{ steps.vars.outputs.DIR }}
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**

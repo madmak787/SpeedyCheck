@@ -12,6 +12,7 @@ import TestHistory, { type SpeedTestResult } from "@/components/test-history"
 import SettingsDialog from "@/components/settings-dialog"
 import InstallPrompt from "@/components/install-prompt"
 import ResultShareDialog from "@/components/result-share-dialog"
+import { LegalLinks } from "@/components/legal-shell"
 import { createUploadBlob, measureTransfer } from "@/lib/measure-bandwidth"
 import { measurePacketLoss, measurePing } from "@/lib/measure-latency"
 import { getStoredLocation, parseCloudflareColo, storeLocation, type UserLocation } from "@/lib/location"
@@ -731,6 +732,7 @@ export default function SpeedTest() {
           )}
         </div>
       )}
+      <LegalLinks className="mt-[clamp(0.15rem,0.6vh,0.4rem)] shrink-0 text-[clamp(0.6rem,1.2vmin,0.7rem)] text-muted-foreground" />
 
       {pwa.showFirstAsk && (
         <InstallPrompt canPrompt={pwa.canPrompt} iosHint={pwa.iosHint} onInstall={() => void pwa.install()} onDismiss={pwa.markAsked} />

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { MapPin, Smartphone, Trash2 } from "lucide-react"
 import { reverseGeocode, type UserLocation } from "@/lib/location"
 import { PLAN_PRESETS } from "@/lib/plan"
+import { LegalLinks } from "@/components/legal-shell"
 
 interface SettingsDialogProps {
   open: boolean
@@ -189,6 +190,11 @@ export default function SettingsDialog({
               <li>Loaded ping runs right after download; idle ping runs after a short pause</li>
               <li>Packet loss: 20 sequential probes; timeouts and failed replies count as lost</li>
             </ul>
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium">Legal</h3>
+            <LegalLinks className="justify-start text-sm text-muted-foreground" />
           </div>
 
           <div className="border-t border-border pt-4">

@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { getCookieConsent } from "@/lib/legal"
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>
@@ -78,17 +79,21 @@ export function usePwaInstall() {
       setIosHint(false)
     }
 
+    const maybeShow = () => {
+      if (!readAsked() && !isStandalone() && getCookieConsent()) setShowFirstAsk(true)
+    }
+
     window.addEventListener("beforeinstallprompt", onPrompt)
     window.addEventListener("appinstalled", onInstalled)
+    window.addEventListener("speedycheck-consent", maybeShow)
 
-    const timer = window.setTimeout(() => {
-      if (!alreadyAsked && !isStandalone()) setShowFirstAsk(true)
-    }, 1800)
+    const timer = window.setTimeout(maybeShow, 1800)
 
     return () => {
       window.clearTimeout(timer)
       window.removeEventListener("beforeinstallprompt", onPrompt)
       window.removeEventListener("appinstalled", onInstalled)
+      window.removeEventListener("speedycheck-consent", maybeShow)
     }
   }, [])
 
