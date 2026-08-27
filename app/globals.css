@@ -125,7 +125,7 @@
     height: 100dvh;
     width: 100dvw;
     overflow: hidden;
-    cursor: url("/cursors/default.png") 4 2, auto;
+    cursor: var(--cursor-default);
   }
   body {
     @apply bg-background text-foreground;
@@ -135,7 +135,7 @@
     overscroll-behavior: none;
     background-image:
       radial-gradient(ellipse 80% 50% at 50% -10%, oklch(0.75 0.15 195 / 0.12), transparent 60%);
-    cursor: url("/cursors/default.png") 4 2, auto;
+    cursor: var(--cursor-default);
   }
   a,
   button,
@@ -145,11 +145,11 @@
   label,
   summary,
   select {
-    cursor: url("/cursors/pointer.png") 16 16, pointer;
+    cursor: var(--cursor-pointer);
   }
   input,
   textarea {
-    cursor: url("/cursors/text.png") 16 16, text;
+    cursor: var(--cursor-text);
   }
   button:disabled,
   [aria-disabled="true"] {

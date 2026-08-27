@@ -4,6 +4,7 @@ import { Geist, Geist_Mono, Pacifico } from "next/font/google"
 import PwaRegister from "@/components/pwa-register"
 import BrandCursor from "@/components/brand-cursor"
 import CookieConsent from "@/components/cookie-consent"
+import { BASE_PATH, siteOrigin, withBasePath } from "@/lib/site"
 import "./globals.css"
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-geist-sans" })
@@ -15,10 +16,10 @@ const pacifico = Pacifico({
 })
 
 export const metadata: Metadata = {
+  metadataBase: new URL(siteOrigin()),
   title: "SpeedyCheck - Check Your Internet Speed",
   description: "Test your internet connection speed with our fast and accurate speed test tool",
   applicationName: "SpeedyCheck",
-  manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     title: "SpeedyCheck",
@@ -26,10 +27,10 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: withBasePath("/icons/icon-192.png"), sizes: "192x192", type: "image/png" },
+      { url: withBasePath("/icons/icon-512.png"), sizes: "512x512", type: "image/png" },
     ],
-    apple: "/apple-touch-icon.png",
+    apple: withBasePath("/apple-touch-icon.png"),
   },
   other: {
     "apple-mobile-web-app-capable": "yes",
@@ -50,7 +51,16 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html
+      lang="en"
+      style={
+        {
+          "--cursor-default": `url("${BASE_PATH}/cursors/default.png") 4 2, auto`,
+          "--cursor-pointer": `url("${BASE_PATH}/cursors/pointer.png") 16 16, pointer`,
+          "--cursor-text": `url("${BASE_PATH}/cursors/text.png") 16 16, text`,
+        } as React.CSSProperties
+      }
+    >
       <body className={`${geist.variable} ${geistMono.variable} ${pacifico.variable} font-sans antialiased`}>
         {children}
         <BrandCursor />

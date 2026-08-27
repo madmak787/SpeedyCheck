@@ -30,7 +30,7 @@ const loadIcon = async (): Promise<HTMLImageElement | null> => {
   try {
     const image = new Image()
     image.crossOrigin = "anonymous"
-    image.src = "/icons/icon-192.png"
+    image.src = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/icons/icon-192.png`
     await image.decode()
     return image
   } catch {
