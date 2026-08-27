@@ -5,8 +5,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { MapPin, Trash2 } from "lucide-react"
+import { MapPin, Smartphone, Trash2 } from "lucide-react"
 import { reverseGeocode, type UserLocation } from "@/lib/location"
+import { PLAN_PRESETS } from "@/lib/plan"
 
 interface SettingsDialogProps {
   open: boolean
@@ -15,6 +16,12 @@ interface SettingsDialogProps {
   location: UserLocation | null
   detected: UserLocation | null
   onLocationChange: (location: UserLocation | null) => void
+  planMbps: number
+  onPlanChange: (mbps: number) => void
+  canInstall: boolean
+  iosInstallHint: boolean
+  installed: boolean
+  onInstall: () => void
 }
 
 export default function SettingsDialog({
@@ -24,10 +31,17 @@ export default function SettingsDialog({
   location,
   detected,
   onLocationChange,
+  planMbps,
+  onPlanChange,
+  canInstall,
+  iosInstallHint,
+  installed,
+  onInstall,
 }: SettingsDialogProps) {
   const [city, setCity] = useState(location?.city || detected?.city || "")
   const [country, setCountry] = useState(location?.country || detected?.country || "")
   const [detecting, setDetecting] = useState(false)
+  const [planInput, setPlanInput] = useState(planMbps ? String(planMbps) : "")
 
   const save = () => {
     const next = { city: city.trim(), country: country.trim() }
@@ -62,11 +76,12 @@ export default function SettingsDialog({
         if (next) {
           setCity(location?.city || detected?.city || "")
           setCountry(location?.country || detected?.country || "")
+          setPlanInput(planMbps ? String(planMbps) : "")
         }
         onOpenChange(next)
       }}
     >
-      <DialogContent className="w-[calc(100%-1.5rem)] sm:max-w-lg">
+      <DialogContent className="max-h-[85dvh] w-[calc(100%-1.5rem)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription>Location helps label results. Speeds still use the nearest Cloudflare edge.</DialogDescription>
@@ -99,12 +114,80 @@ export default function SettingsDialog({
             </div>
           </div>
 
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium">Your plan</h3>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Enter the download speed you pay for. Results are compared to this number, not to Fast.com.
+            </p>
+            <div className="flex items-center gap-2">
+              <Input
+                id="plan"
+                type="number"
+                min={1}
+                inputMode="numeric"
+                value={planInput}
+                onChange={(event) => setPlanInput(event.target.value)}
+                placeholder="100"
+                className="max-w-32"
+              />
+              <span className="text-sm text-muted-foreground">Mbps</span>
+              <Button
+                type="button"
+                size="sm"
+                className="rounded-full"
+                onClick={() => {
+                  const next = Number(planInput)
+                  onPlanChange(Number.isFinite(next) && next > 0 ? Math.round(next) : 0)
+                }}
+              >
+                Save plan
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {PLAN_PRESETS.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => {
+                    setPlanInput(String(preset))
+                    onPlanChange(preset)
+                  }}
+                  className={`rounded-full border px-2.5 py-1 text-xs ${planMbps === preset ? "border-accent bg-accent/15 text-accent" : "border-border text-muted-foreground"}`}
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium">Install app</h3>
+            {installed ? (
+              <p className="text-sm text-muted-foreground">SpeedyCheck is running from your home screen.</p>
+            ) : canInstall ? (
+              <Button type="button" size="sm" className="rounded-full" onClick={onInstall}>
+                <Smartphone className="h-3.5 w-3.5" />
+                Add to home screen
+              </Button>
+            ) : iosInstallHint ? (
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                On iPhone, tap the share button in Safari, then <span className="text-foreground">Add to Home Screen</span>.
+              </p>
+            ) : (
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                Use your browser&apos;s install or add-to-home-screen option to open SpeedyCheck like an app.
+              </p>
+            )}
+          </div>
+
           <div>
             <h3 className="mb-2 text-sm font-medium">How speeds are measured</h3>
             <ul className="list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-muted-foreground">
               <li>Download and upload use 6 parallel streams for 10 seconds, like Ookla</li>
               <li>The score averages the middle of the test and ignores slow-start and spikes</li>
-              <li>Ping uses Cloudflare and Google edges; Fast.com uses Netflix servers, so ping can differ</li>
+              <li>Ping: one request at a time to Cloudflare, using time-to-first-byte</li>
+              <li>Loaded ping runs right after download; idle ping runs after a short pause</li>
+              <li>Packet loss: 20 sequential probes; timeouts and failed replies count as lost</li>
             </ul>
           </div>
 

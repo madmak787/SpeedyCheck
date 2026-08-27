@@ -29,7 +29,7 @@ function LiveSpeedGraph({ samples, unit, compact = false }: LiveSpeedGraphProps)
   const upload = samples.filter((sample) => sample.phase === "upload").map(toPoint).join(" ")
 
   return (
-    <div className={`mx-auto w-full max-w-lg ${compact ? "" : "rounded-2xl border border-border/70 bg-card/40 p-3"}`}>
+    <div className={`mx-auto w-full max-w-lg ${compact ? "h-full" : "rounded-2xl border border-border/70 bg-card/40 p-3"}`}>
       {!compact && (
         <div className="mb-2 flex items-center justify-between text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
           <span>Live</span>
@@ -39,7 +39,7 @@ function LiveSpeedGraph({ samples, unit, compact = false }: LiveSpeedGraphProps)
           </span>
         </div>
       )}
-      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className={compact ? "h-16 w-full" : "h-24 w-full"} role="img" aria-label="Live speed">
+      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className={compact ? "h-full w-full" : "h-24 w-full"} role="img" aria-label="Live speed">
         <polyline
           fill="none"
           stroke="currentColor"

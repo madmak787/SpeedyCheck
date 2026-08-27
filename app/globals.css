@@ -122,12 +122,38 @@
     @apply border-border outline-ring/50;
   }
   html {
-    @apply overflow-x-hidden;
+    height: 100dvh;
+    width: 100dvw;
+    overflow: hidden;
+    cursor: url("/cursors/default.png") 4 2, auto;
   }
   body {
-    @apply bg-background text-foreground overflow-x-hidden min-h-dvh;
+    @apply bg-background text-foreground;
+    height: 100dvh;
+    width: 100dvw;
+    overflow: hidden;
+    overscroll-behavior: none;
     background-image:
       radial-gradient(ellipse 80% 50% at 50% -10%, oklch(0.75 0.15 195 / 0.12), transparent 60%);
+    cursor: url("/cursors/default.png") 4 2, auto;
+  }
+  a,
+  button,
+  [role="button"],
+  [role="radio"],
+  [role="tab"],
+  label,
+  summary,
+  select {
+    cursor: url("/cursors/pointer.png") 16 16, pointer;
+  }
+  input,
+  textarea {
+    cursor: url("/cursors/text.png") 16 16, text;
+  }
+  button:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
   }
 }
 
@@ -143,6 +169,18 @@
 .speed-hero {
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.04em;
+  font-size: clamp(2rem, 9vmin, 12rem);
+  line-height: 0.95;
+}
+
+@media (max-height: 560px) {
+  .speed-gauge-well {
+    display: none;
+  }
+
+  .speed-quality {
+    display: none;
+  }
 }
 
 .fade-rise {
@@ -253,6 +291,53 @@
   50% {
     transform: scale(1.15);
     opacity: 1;
+  }
+}
+
+.brand-cursor-dot,
+.brand-cursor-ring {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 2147483647;
+  pointer-events: none;
+  opacity: 0;
+  will-change: transform;
+}
+
+.brand-cursor-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: oklch(0.75 0.15 195);
+  box-shadow:
+    0 0 0 1.5px oklch(0.12 0 0),
+    0 0 14px oklch(0.75 0.15 195 / 0.7);
+}
+
+.brand-cursor-ring {
+  width: 28px;
+  height: 28px;
+  border: 1.5px solid oklch(0.75 0.15 195 / 0.85);
+  border-radius: 999px;
+  box-shadow: 0 0 18px oklch(0.75 0.15 195 / 0.25);
+  transition: border-color 180ms ease;
+}
+
+html.has-brand-cursor,
+html.has-brand-cursor * {
+  cursor: none !important;
+}
+
+html.has-brand-cursor.brand-cursor-on .brand-cursor-dot,
+html.has-brand-cursor.brand-cursor-on .brand-cursor-ring {
+  opacity: 1;
+}
+
+@media (pointer: coarse) {
+  .brand-cursor-dot,
+  .brand-cursor-ring {
+    display: none;
   }
 }
 

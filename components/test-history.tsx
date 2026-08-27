@@ -2,7 +2,8 @@
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Download, Upload, Clock, Activity, Trash2 } from "lucide-react"
+import { Download, Upload, Clock, Activity, Trash2, WifiOff } from "lucide-react"
+import HistoryChart from "@/components/history-chart"
 import { formatSpeed, type SpeedUnit } from "@/lib/speed-utils"
 
 export interface SpeedTestResult {
@@ -10,6 +11,7 @@ export interface SpeedTestResult {
   uploadSpeed: number
   latency: number
   jitter: number
+  packetLoss?: number
   timestamp: number
 }
 
@@ -19,9 +21,10 @@ interface TestHistoryProps {
   history: SpeedTestResult[]
   onClear: () => void
   unit: SpeedUnit
+  planMbps: number
 }
 
-export default function TestHistory({ open, onOpenChange, history, onClear, unit }: TestHistoryProps) {
+export default function TestHistory({ open, onOpenChange, history, onClear, unit, planMbps }: TestHistoryProps) {
   const formatDate = (timestamp: number) => {
     const date = new Date(timestamp)
     return date.toLocaleString(undefined, {
@@ -46,6 +49,7 @@ export default function TestHistory({ open, onOpenChange, history, onClear, unit
           </div>
         ) : (
           <div className="space-y-3">
+            <HistoryChart history={history} unit={unit} planMbps={planMbps} />
             {history.map((result, index) => (
               <div key={`${result.timestamp}-${index}`} className="rounded-xl border border-border bg-card p-4">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -55,11 +59,12 @@ export default function TestHistory({ open, onOpenChange, history, onClear, unit
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   <HistoryMetric icon={Download} label="Download" value={formatSpeed(result.downloadSpeed, unit).value} unit={formatSpeed(result.downloadSpeed, unit).unit} />
                   <HistoryMetric icon={Upload} label="Upload" value={formatSpeed(result.uploadSpeed, unit).value} unit={formatSpeed(result.uploadSpeed, unit).unit} />
                   <HistoryMetric icon={Clock} label="Ping" value={String(result.latency)} unit="ms" />
                   <HistoryMetric icon={Activity} label="Jitter" value={String(result.jitter)} unit="ms" />
+                  <HistoryMetric icon={WifiOff} label="Loss" value={String(result.packetLoss ?? 0)} unit="%" />
                 </div>
               </div>
             ))}

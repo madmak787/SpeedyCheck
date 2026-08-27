@@ -1,7 +1,5 @@
-const PING_TARGETS = [
-  "https://speed.cloudflare.com/__down?bytes=0",
-  "https://www.gstatic.com/generate_204",
-]
+const PING_URL = "https://speed.cloudflare.com/__down?bytes=0"
+const PING_TIMEOUT_MS = 1500
 
 const median = (values: number[]) => {
   const sorted = [...values].sort((a, b) => a - b)
@@ -9,28 +7,47 @@ const median = (values: number[]) => {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
 }
 
-const pingXhr = (url: string, signal: AbortSignal) =>
-  new Promise<number>((resolve, reject) => {
+const readTtfb = (url: string, fallback: number) => {
+  const entries = performance.getEntriesByName(url)
+  const last = entries.at(-1) as PerformanceResourceTiming | undefined
+  if (last?.requestStart && last.responseStart > last.requestStart) {
+    return last.responseStart - last.requestStart
+  }
+  return fallback
+}
+
+export type PingResult = { ok: true; rtt: number } | { ok: false }
+
+export function pingOnce(signal: AbortSignal): Promise<PingResult> {
+  return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
+    const url = `${PING_URL}&r=${Math.random()}`
     const started = performance.now()
-    xhr.open("GET", `${url}${url.includes("?") ? "&" : "?"}r=${Math.random()}`)
-    xhr.timeout = 4000
-    const finish = (ok: boolean) => {
-      signal.removeEventListener("abort", abort)
-      if (!ok) {
-        reject(new Error("ping failed"))
-        return
-      }
-      resolve(performance.now() - started)
-    }
+    xhr.open("GET", url)
+    xhr.timeout = PING_TIMEOUT_MS
+
     const abort = () => {
       xhr.abort()
       reject(new DOMException("Aborted", "AbortError"))
     }
-    xhr.onload = () => finish(true)
-    xhr.onerror = () => finish(xhr.status === 0)
-    xhr.ontimeout = () => reject(new Error("timeout"))
-    xhr.onabort = () => reject(new DOMException("Aborted", "AbortError"))
+
+    const settle = (ok: boolean) => {
+      signal.removeEventListener("abort", abort)
+      if (!ok) {
+        resolve({ ok: false })
+        return
+      }
+      resolve({ ok: true, rtt: readTtfb(url, performance.now() - started) })
+    }
+
+    xhr.onload = () => settle(xhr.status >= 200 && xhr.status < 400)
+    xhr.onerror = () => settle(false)
+    xhr.ontimeout = () => settle(false)
+    xhr.onabort = () => {
+      if (signal.aborted) reject(new DOMException("Aborted", "AbortError"))
+      else settle(false)
+    }
+
     if (signal.aborted) {
       abort()
       return
@@ -38,6 +55,7 @@ const pingXhr = (url: string, signal: AbortSignal) =>
     signal.addEventListener("abort", abort, { once: true })
     xhr.send()
   })
+}
 
 export async function measurePing({
   packets,
@@ -46,22 +64,30 @@ export async function measurePing({
 }: {
   packets: number
   signal: AbortSignal
-  onSample?: (rtt: number, all: number[]) => void
-}): Promise<{ latency: number; jitter: number; points: number[] }> {
+  onSample?: (rtt: number, all: number[], sent: number) => void
+}): Promise<{ latency: number; jitter: number; points: number[]; lost: number; sent: number }> {
   const points: number[] = []
+  let lost = 0
+  let sent = 0
+
+  await pingOnce(signal).catch((error) => {
+    if ((error as Error).name === "AbortError") throw error
+  })
 
   for (let index = 0; index < packets; index += 1) {
     if (signal.aborted) break
-    const url = PING_TARGETS[index % PING_TARGETS.length]
+    sent += 1
     try {
-      const rtt = await pingXhr(url, signal)
-      if (index === 0) continue
-      if (rtt > 5 && rtt < 1500) {
-        points.push(rtt)
-        onSample?.(rtt, [...points])
+      const result = await pingOnce(signal)
+      if (!result.ok || result.rtt < 2 || result.rtt > 1200) {
+        lost += 1
+      } else {
+        points.push(result.rtt)
+        onSample?.(result.rtt, [...points], sent)
       }
     } catch (error) {
-      if ((error as Error).name === "AbortError") break
+      if ((error as Error).name === "AbortError") throw error
+      lost += 1
     }
   }
 
@@ -75,19 +101,43 @@ export async function measurePing({
     jitter = deltas / (points.length - 1)
   }
 
-  return { latency: Math.round(latency), jitter: Math.round(jitter), points }
+  return {
+    latency: Math.round(latency),
+    jitter: Math.round(jitter),
+    points,
+    lost,
+    sent,
+  }
 }
 
-export async function measureLoadedLatency(signal: AbortSignal, times = 6) {
-  const points: number[] = []
-  for (let index = 0; index < times; index += 1) {
+export async function measurePacketLoss({
+  probes,
+  signal,
+  onProgress,
+}: {
+  probes: number
+  signal: AbortSignal
+  onProgress?: (done: number, total: number, lost: number) => void
+}): Promise<{ percent: number; lost: number; sent: number }> {
+  let lost = 0
+  let sent = 0
+
+  for (let index = 0; index < probes; index += 1) {
     if (signal.aborted) break
+    sent += 1
     try {
-      const rtt = await pingXhr(PING_TARGETS[0], signal)
-      if (rtt > 5 && rtt < 2000) points.push(rtt)
-    } catch {
-      if (signal.aborted) break
+      const result = await pingOnce(signal)
+      if (!result.ok) lost += 1
+    } catch (error) {
+      if ((error as Error).name === "AbortError") throw error
+      lost += 1
     }
+    onProgress?.(sent, probes, lost)
   }
-  return points.length ? Math.round(median(points)) : 0
+
+  return {
+    percent: sent ? Math.round((lost / sent) * 1000) / 10 : 0,
+    lost,
+    sent,
+  }
 }

@@ -48,7 +48,7 @@ export default function PingPulse({ points }: { points: number[] }) {
 export function PingSparkline({ points }: { points: number[] }) {
   if (!points.length) {
     return (
-      <div className="flex h-12 items-center justify-center gap-1">
+      <div className="flex h-full items-center justify-center gap-1">
         {Array.from({ length: 5 }, (_, index) => (
           <span
             key={index}
@@ -71,7 +71,7 @@ export function PingSparkline({ points }: { points: number[] }) {
     .join(" ")
 
   return (
-    <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="h-12 w-full" role="img" aria-label="Ping samples">
+    <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="h-full w-full" role="img" aria-label="Ping samples">
       <polyline
         fill="none"
         stroke="currentColor"

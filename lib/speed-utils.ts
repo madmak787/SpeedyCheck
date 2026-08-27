@@ -123,7 +123,7 @@ export const formatLiveSpeed = (
   return { value: (displayed * 1000).toFixed(0), unit: labels.kilo }
 }
 
-export const STAGE_ORDER = ["idle", "download", "latency", "upload", "jitter", "complete"] as const
+export const STAGE_ORDER = ["idle", "download", "latency", "loss", "upload", "jitter", "complete"] as const
 
 export const advanceStage = (
   current: (typeof STAGE_ORDER)[number],
@@ -159,10 +159,11 @@ export const formatShareText = (
     uploadSpeed: number
     latency: number
     jitter: number
+    packetLoss?: number
   },
   unit: SpeedUnit = "bits",
 ): string => {
   const down = formatSpeed(result.downloadSpeed, unit)
   const up = formatSpeed(result.uploadSpeed, unit)
-  return `My SpeedyCheck results: ↓ ${down.value} ${down.unit} · ↑ ${up.value} ${up.unit} · ping ${result.latency} ms · jitter ${result.jitter} ms`
+  return `My SpeedyCheck results: ↓ ${down.value} ${down.unit} · ↑ ${up.value} ${up.unit} · ping ${result.latency} ms · jitter ${result.jitter} ms · loss ${result.packetLoss ?? 0}%`
 }

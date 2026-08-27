@@ -3,17 +3,23 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Zap, Upload, Download, Clock, Settings, History, Activity, Share2, Copy, Check, Globe, RotateCcw } from "lucide-react"
+import { Zap, Upload, Download, Clock, Settings, History, Activity, Share2, Copy, Check, Globe, RotateCcw, WifiOff } from "lucide-react"
 import SpeedGauge from "@/components/speed-gauge"
 import { PingSparkline } from "@/components/ping-pulse"
 import LiveSpeedGraph from "@/components/live-speed-graph"
 import SpeedUnitToggle from "@/components/speed-unit-toggle"
 import TestHistory, { type SpeedTestResult } from "@/components/test-history"
 import SettingsDialog from "@/components/settings-dialog"
+import InstallPrompt from "@/components/install-prompt"
+import ResultShareDialog from "@/components/result-share-dialog"
 import { createUploadBlob, measureTransfer } from "@/lib/measure-bandwidth"
-import { measureLoadedLatency, measurePing } from "@/lib/measure-latency"
+import { measurePacketLoss, measurePing } from "@/lib/measure-latency"
 import { getStoredLocation, parseCloudflareColo, storeLocation, type UserLocation } from "@/lib/location"
+import PlanCompare from "@/components/plan-compare"
+import { getStoredPlanMbps, storePlanMbps } from "@/lib/plan"
+import { shareResultCard, saveResultCard, renderResultCardBlob } from "@/lib/result-card"
 import { useAnimatedNumber } from "@/hooks/use-animated-number"
+import { usePwaInstall } from "@/hooks/use-pwa-install"
 import {
   formatDataUsed,
   formatLiveSpeed,
@@ -29,12 +35,13 @@ import {
 
 interface TestState {
   isRunning: boolean
-  stage: "idle" | "download" | "latency" | "upload" | "jitter" | "complete"
+  stage: "idle" | "download" | "latency" | "loss" | "upload" | "jitter" | "complete"
   downloadSpeed: number
   uploadSpeed: number
   latency: number
   loadedLatency: number
   jitter: number
+  packetLoss: number
 }
 
 interface NetworkInfo {
@@ -47,6 +54,7 @@ interface NetworkInfo {
 const STAGES = [
   { id: "download", label: "Download" },
   { id: "latency", label: "Ping" },
+  { id: "loss", label: "Loss" },
   { id: "upload", label: "Upload" },
   { id: "jitter", label: "Jitter" },
 ] as const
@@ -82,12 +90,13 @@ export default function SpeedTest() {
   const samplesRef = useRef<SpeedSample[]>([])
   const stageRef = useRef<TestState["stage"]>("idle")
   const liveDownRef = useRef(0)
-  const payloadRef = useRef<Promise<Blob> | null>(null)
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [lossProgress, setLossProgress] = useState({ done: 0, total: 20, lost: 0 })
   const [pingPoints, setPingPoints] = useState<number[]>([])
   const [dataUsed, setDataUsed] = useState({ down: 0, up: 0 })
   const [colo, setColo] = useState("")
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null)
+  const [planMbps, setPlanMbps] = useState(0)
 
   const [copied, setCopied] = useState(false)
   const [unit, setUnit] = useState<SpeedUnit>("bits")
@@ -102,16 +111,22 @@ export default function SpeedTest() {
     latency: 0,
     loadedLatency: 0,
     jitter: 0,
+    packetLoss: 0,
   })
   const [showHistory, setShowHistory] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [testHistory, setTestHistory] = useState<SpeedTestResult[]>([])
+  const [sharing, setSharing] = useState(false)
+  const [showShare, setShowShare] = useState(false)
+  const [shareImageUrl, setShareImageUrl] = useState<string | null>(null)
+  const pwa = usePwaInstall()
 
   const heroSpeed = useAnimatedNumber(heroTarget, testState.stage !== "idle")
 
   useEffect(() => {
     setUnit(getStoredSpeedUnit())
     setUserLocation(getStoredLocation())
+    setPlanMbps(getStoredPlanMbps())
     const stored = localStorage.getItem("speedTestHistory")
     if (stored) {
       try {
@@ -123,28 +138,29 @@ export default function SpeedTest() {
   }, [])
 
   useEffect(() => {
-    fetch("https://speed.cloudflare.com/cdn-cgi/trace")
-      .then((res) => res.text())
-      .then((trace) => {
+    void (async () => {
+      try {
+        const ipRes = await fetch("https://ipwho.is/")
+        const data = await ipRes.json()
+        if (data?.success) {
+          setNetwork({
+            ip: data.ip ?? "Unknown",
+            isp: data.connection?.isp || data.connection?.org || "Unknown ISP",
+            city: data.city ?? "",
+            country: data.country ?? "",
+          })
+        }
+      } catch {
+        /* ignore */
+      }
+      try {
+        const trace = await fetch("https://speed.cloudflare.com/cdn-cgi/trace").then((res) => res.text())
         const { colo: edge } = parseCloudflareColo(trace)
         if (edge) setColo(edge)
-      })
-      .catch(() => null)
-  }, [])
-
-  useEffect(() => {
-    fetch("https://ipwho.is/")
-      .then((res) => res.json())
-      .then((data) => {
-        if (!data?.success) return
-        setNetwork({
-          ip: data.ip ?? "Unknown",
-          isp: data.connection?.isp || data.connection?.org || "Unknown ISP",
-          city: data.city ?? "",
-          country: data.country ?? "",
-        })
-      })
-      .catch(() => null)
+      } catch {
+        /* ignore */
+      }
+    })()
   }, [])
 
   const changeUnit = (next: SpeedUnit) => {
@@ -170,6 +186,11 @@ export default function SpeedTest() {
     storeLocation(next)
   }
 
+  const changePlan = (next: number) => {
+    setPlanMbps(next)
+    storePlanMbps(next)
+  }
+
   const runSpeedTest = () => {
     abortedRef.current = true
     abortRef.current?.abort()
@@ -181,6 +202,7 @@ export default function SpeedTest() {
     setPingPoints([])
     setHeroTarget(0)
     setUploadProgress(0)
+    setLossProgress({ done: 0, total: 20, lost: 0 })
     setDataUsed({ down: 0, up: 0 })
     setCopied(false)
     graphStartRef.current = performance.now()
@@ -192,24 +214,14 @@ export default function SpeedTest() {
       latency: 0,
       loadedLatency: 0,
       jitter: 0,
+      packetLoss: 0,
     })
 
     const controller = new AbortController()
     abortRef.current = controller
-    payloadRef.current = createUploadBlob(4 * 1024 * 1024, controller.signal)
 
     void (async () => {
       try {
-        let loadedLatency = 0
-        void (async () => {
-          try {
-            await waitFor(3500, controller.signal)
-            loadedLatency = await measureLoadedLatency(controller.signal, 5)
-          } catch {
-            /* cancelled */
-          }
-        })()
-
         const down = await measureTransfer({
           direction: "download",
           durationMs: 10000,
@@ -244,9 +256,20 @@ export default function SpeedTest() {
           downloadSpeed,
           uploadSpeed: 0,
           latency: 0,
-          loadedLatency,
+          loadedLatency: 0,
           jitter: 0,
+          packetLoss: 0,
         })
+
+        const loaded = await measurePing({
+          packets: 8,
+          signal: controller.signal,
+          onSample: (_rtt, all) => setPingPoints(all),
+        })
+        if (abortedRef.current) return
+        setTestState((prev) => ({ ...prev, loadedLatency: loaded.latency }))
+        await waitFor(400, controller.signal)
+        if (abortedRef.current) return
 
         const ping = await measurePing({
           packets: 16,
@@ -254,13 +277,35 @@ export default function SpeedTest() {
           onSample: (_rtt, all) => setPingPoints(all),
         })
         if (abortedRef.current) return
-
         setTestState((prev) => ({
           ...prev,
           latency: ping.latency,
-          loadedLatency: loadedLatency || prev.loadedLatency,
+          loadedLatency: loaded.latency,
         }))
-        await waitFor(400, controller.signal)
+
+        stageRef.current = "loss"
+        setLossProgress({ done: 0, total: 20, lost: 0 })
+        setTestState({
+          isRunning: true,
+          stage: "loss",
+          downloadSpeed,
+          uploadSpeed: 0,
+          latency: ping.latency,
+          loadedLatency: loaded.latency,
+          jitter: 0,
+          packetLoss: 0,
+        })
+        const loss = await measurePacketLoss({
+          probes: 20,
+          signal: controller.signal,
+          onProgress: (done, total, lost) => {
+            setLossProgress({ done, total, lost })
+            setTestState((prev) => ({
+              ...prev,
+              packetLoss: done ? Math.round((lost / done) * 1000) / 10 : 0,
+            }))
+          },
+        })
         if (abortedRef.current) return
 
         stageRef.current = "upload"
@@ -271,11 +316,12 @@ export default function SpeedTest() {
           downloadSpeed,
           uploadSpeed: 0,
           latency: ping.latency,
-          loadedLatency,
+          loadedLatency: loaded.latency,
           jitter: 0,
+          packetLoss: loss.percent,
         })
 
-        const blob = await (payloadRef.current ?? createUploadBlob(4 * 1024 * 1024, controller.signal))
+        const blob = await createUploadBlob(4 * 1024 * 1024, controller.signal)
         const up = await measureTransfer({
           direction: "upload",
           durationMs: 10000,
@@ -299,8 +345,9 @@ export default function SpeedTest() {
           downloadSpeed,
           uploadSpeed: up.mbps,
           latency: ping.latency,
-          loadedLatency,
+          loadedLatency: loaded.latency,
           jitter: ping.jitter,
+          packetLoss: loss.percent,
         })
         await waitFor(900, controller.signal)
         if (abortedRef.current) return
@@ -312,14 +359,16 @@ export default function SpeedTest() {
           downloadSpeed,
           uploadSpeed: up.mbps,
           latency: ping.latency,
-          loadedLatency,
+          loadedLatency: loaded.latency,
           jitter: ping.jitter,
+          packetLoss: loss.percent,
         })
         saveTestResult({
           downloadSpeed,
           uploadSpeed: up.mbps,
           latency: ping.latency,
           jitter: ping.jitter,
+          packetLoss: loss.percent,
           timestamp: Date.now(),
         })
       } catch (error) {
@@ -355,22 +404,8 @@ export default function SpeedTest() {
       latency: 0,
       loadedLatency: 0,
       jitter: 0,
+      packetLoss: 0,
     })
-  }
-
-  const shareResult = async () => {
-    const text = formatShareText(testState, unit)
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: "SpeedyCheck", text })
-        return
-      }
-      await navigator.clipboard.writeText(text)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      /* cancelled */
-    }
   }
 
   const copyResult = async () => {
@@ -387,15 +422,70 @@ export default function SpeedTest() {
       : formatLiveSpeed(heroSpeed, unit)
   const quality = testState.stage === "complete" ? getConnectionQuality(testState.downloadSpeed, testState.latency) : null
   const location = [userLocation?.city || network?.city, userLocation?.country || network?.country].filter(Boolean).join(", ")
+
+  const sharePayload = () => ({
+    downloadMbps: testState.downloadSpeed,
+    uploadMbps: testState.uploadSpeed,
+    latency: testState.latency,
+    jitter: testState.jitter,
+    packetLoss: testState.packetLoss,
+    unit,
+    isp: network?.isp,
+    location,
+    colo,
+    planMbps,
+  })
+
+  const openShareCard = async () => {
+    setShowShare(true)
+    setSharing(true)
+    try {
+      const blob = await renderResultCardBlob(sharePayload())
+      const url = URL.createObjectURL(blob)
+      setShareImageUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev)
+        return url
+      })
+    } catch {
+      setShowShare(false)
+      await navigator.clipboard.writeText(formatShareText(testState, unit)).catch(() => {})
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } finally {
+      setSharing(false)
+    }
+  }
+
+  const shareResult = async () => {
+    setSharing(true)
+    try {
+      await shareResultCard(sharePayload(), formatShareText(testState, unit))
+    } catch {
+      /* cancelled */
+    } finally {
+      setSharing(false)
+    }
+  }
+
+  const saveResult = async () => {
+    try {
+      await saveResultCard(sharePayload())
+    } catch {
+      /* ignore */
+    }
+  }
+
   const currentIndex = STAGES.findIndex((item) => item.id === testState.stage)
   const status =
     testState.stage === "download"
       ? "Your internet speed is"
       : testState.stage === "latency"
         ? pingPoints.length
-          ? `Measuring ping · ${pingPoints.length}/16`
+          ? `Measuring ping · ${pingPoints.length}`
           : "Measuring ping"
-        : testState.stage === "upload"
+        : testState.stage === "loss"
+          ? `Checking packet loss · ${lossProgress.done}/${lossProgress.total}`
+          : testState.stage === "upload"
           ? "Measuring upload"
           : testState.stage === "jitter"
             ? "Measuring jitter"
@@ -404,20 +494,20 @@ export default function SpeedTest() {
               : "Your internet speed is"
 
   return (
-    <div className="relative mx-auto flex min-h-dvh w-full max-w-3xl flex-col px-5 py-5 sm:px-8 sm:py-8">
-      <header className="mb-8 flex items-center justify-between gap-3">
+    <div className="relative mx-auto flex h-full w-full max-w-[min(100dvw,120rem)] flex-col overflow-hidden px-[max(clamp(0.6rem,2vw,2.5rem),env(safe-area-inset-left))] pr-[max(clamp(0.6rem,2vw,2.5rem),env(safe-area-inset-right))] pt-[max(clamp(0.4rem,1.2vh,1.5rem),env(safe-area-inset-top))] pb-[max(clamp(0.4rem,1.2vh,1.5rem),env(safe-area-inset-bottom))]">
+      <header className="flex shrink-0 items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
-          <Zap className="h-6 w-6 shrink-0 text-accent" fill="currentColor" />
-          <h1 className="truncate text-lg font-semibold tracking-tight sm:text-xl">SpeedyCheck</h1>
+          <Zap className="h-[clamp(1.1rem,2.4vmin,1.75rem)] w-[clamp(1.1rem,2.4vmin,1.75rem)] shrink-0 text-accent" fill="currentColor" />
+          <h1 className="truncate text-[clamp(0.95rem,2vmin,1.35rem)] font-semibold tracking-tight">SpeedyCheck</h1>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 items-center gap-0.5">
           <SpeedUnitToggle unit={unit} onChange={changeUnit} />
           <Button
             variant="ghost"
             size="icon"
             onClick={() => setShowHistory(true)}
             aria-label="Open test history"
-            className="text-muted-foreground hover:bg-secondary hover:text-foreground"
+            className="h-9 w-9 text-muted-foreground hover:bg-secondary hover:text-foreground"
           >
             <History className="h-5 w-5" />
           </Button>
@@ -426,24 +516,24 @@ export default function SpeedTest() {
             size="icon"
             onClick={() => setShowSettings(true)}
             aria-label="Open settings"
-            className="text-muted-foreground hover:bg-secondary hover:text-foreground"
+            className="h-9 w-9 text-muted-foreground hover:bg-secondary hover:text-foreground"
           >
             <Settings className="h-5 w-5" />
           </Button>
         </div>
       </header>
 
-      <div className="flex flex-1 flex-col items-center justify-center text-center">
-        <p className="mb-5 min-h-7 text-base text-muted-foreground transition-opacity sm:text-lg">{status}</p>
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden text-center">
+        <p className="shrink-0 text-[clamp(0.75rem,1.8vmin,1.125rem)] text-muted-foreground">{status}</p>
 
-        <div className="mb-6 flex w-full max-w-xs gap-2">
+        <div className="mt-[clamp(0.35rem,1vh,0.9rem)] flex w-full max-w-3xl shrink-0 gap-1 sm:gap-2">
           {STAGES.map((stage, index) => {
             const isActive = testState.stage === stage.id
             const isDone = testState.stage === "complete" || (currentIndex > index && currentIndex !== -1)
             return (
-              <div key={stage.id} className="flex flex-1 flex-col items-center gap-1.5">
+              <div key={stage.id} className="flex min-w-0 flex-1 flex-col items-center gap-1">
                 <div className={`h-1 w-full rounded-full transition-colors duration-500 ${isActive || isDone ? "bg-accent" : "bg-muted"}`} />
-                <span className={`text-[10px] uppercase tracking-[0.14em] ${isActive ? "text-accent" : "text-muted-foreground"}`}>
+                <span className={`text-[clamp(0.55rem,1.3vmin,0.7rem)] uppercase tracking-[0.12em] ${isActive ? "text-accent" : "text-muted-foreground"}`}>
                   {stage.label}
                 </span>
               </div>
@@ -451,19 +541,19 @@ export default function SpeedTest() {
           })}
         </div>
 
-        <div className="flex min-h-[11.5rem] w-full items-center justify-center">
+        <div className="speed-gauge-well flex min-h-0 w-full flex-1 items-center justify-center">
           <SpeedGauge speed={heroSpeed} isRunning={live && testState.stage === "download"} />
         </div>
 
-        <div className="mt-2 flex items-end justify-center gap-3">
-          <div className="speed-hero bg-linear-to-r from-accent via-cyan-300 to-accent bg-clip-text text-6xl font-semibold text-transparent sm:text-8xl">
+        <div className="flex shrink-0 items-end justify-center gap-2 sm:gap-3">
+          <div className="speed-hero bg-linear-to-r from-accent via-cyan-300 to-accent bg-clip-text font-semibold text-transparent">
             {formatted.value}
           </div>
           {testState.stage === "complete" && (
             <button
               type="button"
               onClick={runSpeedTest}
-              className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-accent text-accent-foreground transition hover:scale-105 fade-rise"
+              className="mb-[0.15em] flex h-[clamp(2rem,4.5vmin,2.75rem)] w-[clamp(2rem,4.5vmin,2.75rem)] items-center justify-center rounded-full bg-accent text-accent-foreground transition hover:scale-105 fade-rise"
               aria-label="Test again"
             >
               <RotateCcw className="h-4 w-4" />
@@ -473,16 +563,32 @@ export default function SpeedTest() {
         <button
           type="button"
           onClick={() => changeUnit(unit === "bits" ? "bytes" : "bits")}
-          className="mt-1 text-lg text-muted-foreground transition-colors hover:text-foreground sm:text-xl"
+          className="shrink-0 text-[clamp(0.85rem,2vmin,1.25rem)] text-muted-foreground transition-colors hover:text-foreground"
         >
           {formatted.unit}
         </button>
         {testState.stage === "complete" && unit === "bytes" && (
-          <p className="text-sm text-muted-foreground">{Math.round(testState.downloadSpeed)} Mbps</p>
+          <p className="shrink-0 text-[11px] text-muted-foreground sm:text-sm">{Math.round(testState.downloadSpeed)} Mbps</p>
         )}
 
-        <div className="mt-4 h-12 w-full max-w-lg">
+        <div className="mt-[clamp(0.2rem,0.8vh,0.6rem)] flex h-[clamp(1.75rem,6vh,3.25rem)] w-full max-w-2xl shrink-0 items-center">
           {isPing && <PingSparkline points={pingPoints} />}
+          {testState.stage === "loss" && (
+            <div className="mx-auto w-full max-w-xs">
+              <div className="mb-1 flex justify-between text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                <span>Packet loss</span>
+                <span>
+                  {lossProgress.lost} lost · {lossProgress.done}/{lossProgress.total}
+                </span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-amber-400 transition-[width] duration-150"
+                  style={{ width: `${Math.max((lossProgress.done / lossProgress.total) * 100, 4)}%` }}
+                />
+              </div>
+            </div>
+          )}
           {testState.stage === "upload" && (
             <div className="mx-auto w-full max-w-xs">
               <div className="mb-1 flex justify-between text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
@@ -501,7 +607,7 @@ export default function SpeedTest() {
             <LiveSpeedGraph samples={samples} unit={unit} compact />
           )}
           {testState.stage === "jitter" && (
-            <div className="flex h-12 items-center justify-center gap-1">
+            <div className="flex h-full w-full items-center justify-center gap-1">
               {Array.from({ length: 7 }, (_, index) => (
                 <span
                   key={index}
@@ -513,12 +619,12 @@ export default function SpeedTest() {
           )}
         </div>
 
-        <div className="mt-4 flex min-h-16 items-center justify-center">
+        <div className="mt-[clamp(0.2rem,0.8vh,0.6rem)] flex h-[clamp(2rem,6vh,3.5rem)] shrink-0 items-center justify-center">
           {testState.stage === "idle" && (
             <Button
               size="lg"
               onClick={runSpeedTest}
-              className="h-12 rounded-full bg-accent px-8 text-base font-semibold text-accent-foreground shadow-[0_0_32px_oklch(0.75_0.15_195/0.35)] transition hover:bg-accent/90"
+              className="h-10 rounded-full bg-accent px-7 text-sm font-semibold text-accent-foreground shadow-[0_0_32px_oklch(0.75_0.15_195/0.35)] transition hover:bg-accent/90 sm:h-12 sm:px-8 sm:text-base"
             >
               <Zap className="h-4 w-4" fill="currentColor" />
               Start
@@ -531,11 +637,11 @@ export default function SpeedTest() {
           )}
           {testState.stage === "complete" && (
             <div className="flex gap-2 fade-rise">
-              <Button variant="outline" onClick={shareResult} className="rounded-full">
+              <Button variant="outline" onClick={openShareCard} disabled={sharing} className="h-9 rounded-full px-3 sm:h-10 sm:px-4">
                 <Share2 className="h-4 w-4" />
                 Share
               </Button>
-              <Button variant="outline" onClick={copyResult} className="rounded-full">
+              <Button variant="outline" onClick={copyResult} className="h-9 rounded-full px-3 sm:h-10 sm:px-4">
                 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 {copied ? "Copied" : "Copy"}
               </Button>
@@ -544,13 +650,23 @@ export default function SpeedTest() {
         </div>
 
         {quality && (
-          <p className="mt-5 max-w-sm text-sm text-muted-foreground fade-rise">
+          <p className="speed-quality mt-[clamp(0.2rem,0.8vh,0.5rem)] max-w-lg shrink-0 truncate text-[clamp(0.7rem,1.6vmin,0.9rem)] text-muted-foreground fade-rise">
             <span className="font-medium text-accent">{quality.label}.</span> {quality.description}
           </p>
         )}
+        {testState.stage === "complete" && (
+          <div className="mt-[clamp(0.2rem,0.7vh,0.5rem)] w-full shrink-0 px-1">
+            <PlanCompare
+              downloadMbps={testState.downloadSpeed}
+              planMbps={planMbps}
+              unit={unit}
+              onSetPlan={() => setShowSettings(true)}
+            />
+          </div>
+        )}
       </div>
 
-      <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid shrink-0 grid-cols-5 gap-[clamp(0.25rem,0.8vw,0.75rem)]">
         <MetricCard
           icon={Download}
           label="Download"
@@ -563,8 +679,8 @@ export default function SpeedTest() {
           icon={Clock}
           label="Latency"
           value={testState.latency ? String(testState.latency) : "—"}
-          unit="ms unloaded"
-          detail={testState.loadedLatency ? `Loaded ${testState.loadedLatency} ms` : undefined}
+          unit="ms"
+          detail={testState.loadedLatency ? `L ${testState.loadedLatency}` : undefined}
           live={isPing}
           dimmed={!isAtLeast(testState.stage, "latency")}
         />
@@ -584,22 +700,30 @@ export default function SpeedTest() {
           live={testState.stage === "jitter"}
           dimmed={!isAtLeast(testState.stage, "jitter")}
         />
+        <MetricCard
+          icon={WifiOff}
+          label="Loss"
+          value={isAtLeast(testState.stage, "loss") ? String(testState.packetLoss) : "—"}
+          unit="%"
+          live={testState.stage === "loss"}
+          dimmed={!isAtLeast(testState.stage, "loss")}
+        />
       </div>
 
       {(network || location || colo) && (
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <div className="mt-[clamp(0.25rem,1vh,0.7rem)] flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-0.5 text-[clamp(0.65rem,1.4vmin,0.8rem)] text-muted-foreground">
           {network && (
-            <span className="inline-flex items-center gap-1.5">
-              <Globe className="h-3.5 w-3.5" />
+            <span className="inline-flex max-w-[40vw] items-center gap-1 truncate">
+              <Globe className="h-3.5 w-3.5 shrink-0" />
               {network.isp}
             </span>
           )}
           {location && (
-            <button type="button" onClick={() => setShowSettings(true)} className="underline-offset-2 hover:underline">
+            <button type="button" onClick={() => setShowSettings(true)} className="max-w-[30vw] truncate underline-offset-2 hover:underline">
               {location}
             </button>
           )}
-          {colo && <span>Cloudflare {colo}</span>}
+          {colo && <span>CF {colo}</span>}
           {testState.stage === "complete" && (dataUsed.down > 0 || dataUsed.up > 0) && (
             <span>
               {formatDataUsed(dataUsed.down)} ↓ · {formatDataUsed(dataUsed.up)} ↑
@@ -608,7 +732,33 @@ export default function SpeedTest() {
         </div>
       )}
 
-      <TestHistory open={showHistory} onOpenChange={setShowHistory} history={testHistory} onClear={() => persistHistory([])} unit={unit} />
+      {pwa.showFirstAsk && (
+        <InstallPrompt canPrompt={pwa.canPrompt} iosHint={pwa.iosHint} onInstall={() => void pwa.install()} onDismiss={pwa.markAsked} />
+      )}
+      <ResultShareDialog
+        open={showShare}
+        onOpenChange={(open) => {
+          setShowShare(open)
+          if (!open) {
+            setShareImageUrl((prev) => {
+              if (prev) URL.revokeObjectURL(prev)
+              return null
+            })
+          }
+        }}
+        imageUrl={shareImageUrl}
+        sharing={sharing}
+        onShare={() => void shareResult()}
+        onSave={() => void saveResult()}
+      />
+      <TestHistory
+        open={showHistory}
+        onOpenChange={setShowHistory}
+        history={testHistory}
+        onClear={() => persistHistory([])}
+        unit={unit}
+        planMbps={planMbps}
+      />
       <SettingsDialog
         open={showSettings}
         onOpenChange={setShowSettings}
@@ -616,6 +766,12 @@ export default function SpeedTest() {
         location={userLocation}
         detected={network ? { city: network.city, country: network.country } : null}
         onLocationChange={changeLocation}
+        planMbps={planMbps}
+        onPlanChange={changePlan}
+        canInstall={pwa.canPrompt}
+        iosInstallHint={pwa.iosHint}
+        installed={pwa.installed}
+        onInstall={() => void pwa.install()}
       />
     </div>
   )
@@ -639,14 +795,14 @@ function MetricCard({
   dimmed?: boolean
 }) {
   return (
-    <Card className={`border-border/80 bg-card/50 p-4 text-left transition-opacity duration-500 ${live ? "metric-live" : ""} ${dimmed ? "opacity-40" : "opacity-100"}`}>
-      <div className="mb-1.5 flex items-center gap-2 text-muted-foreground">
-        <Icon className="h-3.5 w-3.5 text-accent" />
-        <h3 className="text-[11px] uppercase tracking-[0.12em]">{label}</h3>
+    <Card className={`min-w-0 border-border/80 bg-card/50 p-[clamp(0.35rem,1vmin,0.85rem)] text-left transition-opacity duration-500 ${live ? "metric-live" : ""} ${dimmed ? "opacity-40" : "opacity-100"}`}>
+      <div className="mb-0.5 flex items-center gap-1 text-muted-foreground sm:mb-1 sm:gap-1.5">
+        <Icon className="h-3 w-3 shrink-0 text-accent sm:h-3.5 sm:w-3.5" />
+        <h3 className="truncate text-[clamp(0.5rem,1.1vmin,0.7rem)] uppercase tracking-[0.08em]">{label}</h3>
       </div>
-      <p className="text-xl font-semibold tabular-nums">{value}</p>
-      <p className="text-xs text-muted-foreground">{unit}</p>
-      {detail && <p className="mt-1 text-xs text-muted-foreground">{detail}</p>}
+      <p className="truncate text-[clamp(0.8rem,2.2vmin,1.35rem)] font-semibold tabular-nums">{value}</p>
+      <p className="truncate text-[clamp(0.55rem,1.2vmin,0.75rem)] text-muted-foreground">{unit}</p>
+      {detail && <p className="mt-0.5 hidden truncate text-[10px] text-muted-foreground min-[800px]:block">{detail}</p>}
     </Card>
   )
 }

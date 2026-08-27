@@ -21,8 +21,8 @@ export default function SpeedGauge({ speed, isRunning }: SpeedGaugeProps) {
   const formatTick = (value: number) => (value >= 1000 ? `${value / 1000}k` : String(value))
 
   return (
-    <div className="relative mx-auto w-[min(100%,16rem)] sm:w-64">
-      <svg className="h-auto w-full" viewBox="0 0 200 118" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <div className="relative mx-auto h-full max-h-[min(22vh,12rem)] w-[min(42vmin,20rem)]">
+      <svg className="h-full w-full" viewBox="0 0 200 118" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" preserveAspectRatio="xMidYMid meet">
         <defs>
           <linearGradient id="gauge-fill" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.35" />
