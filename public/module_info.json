@@ -1,0 +1,9 @@
+{
+  "title": "SpeedyCheck",
+  "short_desc": "Browser internet speed test. Measure download, upload, ping, jitter, and packet loss, then compare results to your plan.",
+  "doclink": "#",
+  "status": "live",
+  "type": "module",
+  "slug": "speedy-check",
+  "tags": "free internet speed test"
+}
