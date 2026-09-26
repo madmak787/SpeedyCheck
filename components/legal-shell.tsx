@@ -43,6 +43,12 @@ export function LegalLinks({ className = "" }: { className?: string }) {
           {page.label}
         </Link>
       ))}
+      <span>
+        Coded By &copy;
+        <a href="https://khanamir.me" target="_blank" rel="noopener" className="hover:text-foreground hover:underline">
+          madmak787
+        </a>
+      </span>
     </nav>
   )
 }
