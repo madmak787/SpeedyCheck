@@ -149,9 +149,19 @@ export async function measureTransfer({
   const hardStop = window.setTimeout(stop, durationMs + 1500)
 
   const worker = async () => {
+    let failures = 0
     while (!local.signal.aborted && performance.now() < spawnUntil) {
+      const before = totalBytes
       if (direction === "download") await downloadChunk(local.signal, addBytes)
       else await uploadChunk(blob as Blob, local.signal, addBytes)
+      if (totalBytes > before) {
+        failures = 0
+        continue
+      }
+      // A request that moved no bytes failed; back off instead of retrying in a tight loop, and give up after a few.
+      failures += 1
+      if (failures >= 4 && totalBytes === 0) break
+      await new Promise((resolve) => window.setTimeout(resolve, 250 * failures))
     }
   }
 

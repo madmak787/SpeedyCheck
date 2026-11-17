@@ -43,11 +43,11 @@ export default function HistoryChart({
 
   return (
     <div className="mb-5 rounded-2xl border border-border/70 bg-card/40 p-3">
-      <div className="mb-2 flex items-center justify-between text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+      <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
         <span>History</span>
         <span className="flex gap-3">
           <span className="text-accent">Download</span>
-          <span className="text-fuchsia-400">Upload</span>
+          <span className="text-foreground/70">Upload</span>
           {planMbps > 0 && <span>Plan</span>}
         </span>
       </div>
@@ -65,7 +65,7 @@ export default function HistoryChart({
           />
         )}
         <polyline fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" className="text-accent" points={downLine} />
-        <polyline fill="none" stroke="#e879f9" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" points={upLine} />
+        <polyline fill="none" stroke="currentColor" className="text-foreground/60" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" points={upLine} />
         {displayed.map((item, index) => (
           <circle key={`d-${points[index].timestamp}`} cx={x(index)} cy={y(item.down)} r="3" className="fill-accent" />
         ))}

@@ -31,11 +31,11 @@ function LiveSpeedGraph({ samples, unit, compact = false }: LiveSpeedGraphProps)
   return (
     <div className={`mx-auto w-full max-w-lg ${compact ? "h-full" : "rounded-2xl border border-border/70 bg-card/40 p-3"}`}>
       {!compact && (
-        <div className="mb-2 flex items-center justify-between text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+        <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
           <span>Live</span>
           <span className="flex gap-3">
             <span className="text-accent">Download</span>
-            <span className="text-fuchsia-400">Upload</span>
+            <span className="text-foreground/70">Upload</span>
           </span>
         </div>
       )}
@@ -51,7 +51,7 @@ function LiveSpeedGraph({ samples, unit, compact = false }: LiveSpeedGraphProps)
         />
         <polyline
           fill="none"
-          stroke="#e879f9"
+          stroke="currentColor" className="text-foreground/60"
           strokeWidth="2.2"
           strokeLinejoin="round"
           strokeLinecap="round"

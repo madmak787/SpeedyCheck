@@ -114,6 +114,7 @@ export default function SpeedTest() {
     jitter: 0,
     packetLoss: 0,
   })
+  const [failure, setFailure] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [testHistory, setTestHistory] = useState<SpeedTestResult[]>([])
@@ -206,6 +207,7 @@ export default function SpeedTest() {
     setLossProgress({ done: 0, total: 20, lost: 0 })
     setDataUsed({ down: 0, up: 0 })
     setCopied(false)
+    setFailure(null)
     graphStartRef.current = performance.now()
     setTestState({
       isRunning: true,
@@ -245,6 +247,8 @@ export default function SpeedTest() {
           },
         })
         if (abortedRef.current) return
+        // No bytes at all means the speed server was unreachable; stop instead of reporting a fake 0 Mbps result.
+        if (down.bytes === 0) throw new Error("unreachable")
 
         const downloadSpeed = down.mbps
         setHeroTarget(downloadSpeed)
@@ -375,6 +379,21 @@ export default function SpeedTest() {
       } catch (error) {
         if ((error as Error).name === "AbortError" || abortedRef.current) return
         console.error("Speed test error:", error)
+        stageRef.current = "idle"
+        setHeroTarget(0)
+        setSamples([])
+        samplesRef.current = []
+        setTestState({
+          isRunning: false,
+          stage: "idle",
+          downloadSpeed: 0,
+          uploadSpeed: 0,
+          latency: 0,
+          loadedLatency: 0,
+          jitter: 0,
+          packetLoss: 0,
+        })
+        setFailure("Couldn't reach the speed test server. Check your connection, then start again.")
       }
     })()
   }
@@ -492,7 +511,7 @@ export default function SpeedTest() {
             ? "Measuring jitter"
             : testState.stage === "complete"
               ? "Your internet speed is"
-              : "Your internet speed is"
+              : failure ?? "Your internet speed is"
 
   return (
     <div className="relative mx-auto flex h-full w-full max-w-[min(100dvw,120rem)] flex-col overflow-hidden px-[max(clamp(0.6rem,2vw,2.5rem),env(safe-area-inset-left))] pr-[max(clamp(0.6rem,2vw,2.5rem),env(safe-area-inset-right))] pt-[max(clamp(0.4rem,1.2vh,1.5rem),env(safe-area-inset-top))] pb-[max(clamp(0.4rem,1.2vh,1.5rem),env(safe-area-inset-bottom))]">
@@ -534,7 +553,7 @@ export default function SpeedTest() {
             return (
               <div key={stage.id} className="flex min-w-0 flex-1 flex-col items-center gap-1">
                 <div className={`h-1 w-full rounded-full transition-colors duration-500 ${isActive || isDone ? "bg-accent" : "bg-muted"}`} />
-                <span className={`text-[clamp(0.55rem,1.3vmin,0.7rem)] uppercase tracking-[0.12em] ${isActive ? "text-accent" : "text-muted-foreground"}`}>
+                <span className={`text-[clamp(0.55rem,1.3vmin,0.7rem)] ${isActive ? "text-accent" : "text-muted-foreground"}`}>
                   {stage.label}
                 </span>
               </div>
@@ -547,14 +566,14 @@ export default function SpeedTest() {
         </div>
 
         <div className="flex shrink-0 items-end justify-center gap-2 sm:gap-3">
-          <div className="speed-hero bg-linear-to-r from-accent via-cyan-300 to-accent bg-clip-text font-semibold text-transparent">
+          <div className="speed-hero font-medium text-foreground">
             {formatted.value}
           </div>
           {testState.stage === "complete" && (
             <button
               type="button"
               onClick={runSpeedTest}
-              className="mb-[0.15em] flex h-[clamp(2rem,4.5vmin,2.75rem)] w-[clamp(2rem,4.5vmin,2.75rem)] items-center justify-center rounded-full bg-accent text-accent-foreground transition hover:scale-105 fade-rise"
+              className="mb-[0.15em] flex h-[clamp(2rem,4.5vmin,2.75rem)] w-[clamp(2rem,4.5vmin,2.75rem)] items-center justify-center rounded-full bg-accent text-accent-foreground transition-colors hover:bg-accent/90 fade-rise"
               aria-label="Test again"
             >
               <RotateCcw className="h-4 w-4" />
@@ -576,7 +595,7 @@ export default function SpeedTest() {
           {isPing && <PingSparkline points={pingPoints} />}
           {testState.stage === "loss" && (
             <div className="mx-auto w-full max-w-xs">
-              <div className="mb-1 flex justify-between text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+              <div className="mb-1 flex justify-between text-xs text-muted-foreground">
                 <span>Packet loss</span>
                 <span>
                   {lossProgress.lost} lost · {lossProgress.done}/{lossProgress.total}
@@ -592,13 +611,13 @@ export default function SpeedTest() {
           )}
           {testState.stage === "upload" && (
             <div className="mx-auto w-full max-w-xs">
-              <div className="mb-1 flex justify-between text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+              <div className="mb-1 flex justify-between text-xs text-muted-foreground">
                 <span>Upload</span>
                 <span>{Math.round(uploadProgress * 100)}%</span>
               </div>
               <div className="h-1.5 overflow-hidden rounded-full bg-muted">
                 <div
-                  className="h-full rounded-full bg-fuchsia-400 transition-[width] duration-150"
+                  className="h-full rounded-full bg-foreground/60 transition-[width] duration-150"
                   style={{ width: `${Math.max(uploadProgress * 100, 4)}%` }}
                 />
               </div>
@@ -625,9 +644,9 @@ export default function SpeedTest() {
             <Button
               size="lg"
               onClick={runSpeedTest}
-              className="h-10 rounded-full bg-accent px-7 text-sm font-semibold text-accent-foreground shadow-[0_0_32px_oklch(0.75_0.15_195/0.35)] transition hover:bg-accent/90 sm:h-12 sm:px-8 sm:text-base"
+              className="h-10 rounded-full bg-accent px-7 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 sm:h-12 sm:px-8 sm:text-base"
             >
-              <Zap className="h-4 w-4" fill="currentColor" />
+              <Zap className="h-4 w-4" />
               Start
             </Button>
           )}
@@ -799,10 +818,10 @@ function MetricCard({
   return (
     <Card className={`min-w-0 border-border/80 bg-card/50 p-[clamp(0.35rem,1vmin,0.85rem)] text-left transition-opacity duration-500 ${live ? "metric-live" : ""} ${dimmed ? "opacity-40" : "opacity-100"}`}>
       <div className="mb-0.5 flex items-center gap-1 text-muted-foreground sm:mb-1 sm:gap-1.5">
-        <Icon className="h-3 w-3 shrink-0 text-accent sm:h-3.5 sm:w-3.5" />
-        <h3 className="truncate text-[clamp(0.5rem,1.1vmin,0.7rem)] uppercase tracking-[0.08em]">{label}</h3>
+        <Icon className="hidden h-3.5 w-3.5 shrink-0 sm:block" />
+        <h3 className="truncate text-[clamp(0.625rem,1.3vmin,0.75rem)]">{label}</h3>
       </div>
-      <p className="truncate text-[clamp(0.8rem,2.2vmin,1.35rem)] font-semibold tabular-nums">{value}</p>
+      <p className="truncate text-[clamp(0.8rem,2.2vmin,1.35rem)] font-medium tabular-nums">{value}</p>
       <p className="truncate text-[clamp(0.55rem,1.2vmin,0.75rem)] text-muted-foreground">{unit}</p>
       {detail && <p className="mt-0.5 hidden truncate text-[10px] text-muted-foreground min-[800px]:block">{detail}</p>}
     </Card>

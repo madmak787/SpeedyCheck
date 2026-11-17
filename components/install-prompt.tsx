@@ -22,7 +22,7 @@ export default function InstallPrompt({
 
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center p-[max(0.75rem,env(safe-area-inset-bottom))]">
-      <div className="pointer-events-auto flex w-full max-w-lg items-center gap-3 rounded-2xl border border-accent/40 bg-card/95 px-3 py-2.5 shadow-[0_8px_40px_oklch(0.75_0.15_195/0.18)] backdrop-blur-md fade-rise">
+      <div className="pointer-events-auto flex w-full max-w-lg items-center gap-3 rounded-2xl border border-border bg-card px-3 py-2.5 shadow-lg shadow-black/30 fade-rise">
         <Smartphone className="h-5 w-5 shrink-0 text-accent" />
         <p className="min-w-0 flex-1 text-left text-xs leading-snug text-muted-foreground sm:text-sm">{copy}</p>
         <div className="flex shrink-0 gap-1.5">

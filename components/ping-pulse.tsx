@@ -19,7 +19,7 @@ export default function PingPulse({ points }: { points: number[] }) {
         <div className="absolute inset-[38%] rounded-full border border-accent/12" />
         <div className="ping-echo absolute inset-[8%] rounded-full border-2 border-accent/70" />
         <div className="ping-echo ping-echo-2 absolute inset-[8%] rounded-full border border-accent/50" />
-        <div className="absolute inset-[42%] rounded-full bg-accent/10 shadow-[0_0_28px_oklch(0.75_0.15_195/0.35)]" />
+        <div className="absolute inset-[42%] rounded-full bg-accent/10" />
         <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" aria-hidden="true">
           {points.map((rtt, index) => {
             const angle = (index / EXPECTED) * Math.PI * 2 - Math.PI / 2

@@ -191,7 +191,7 @@ function CompareTable({ results, unit }: { results: SpeedTestResult[]; unit: Spe
       <p className="mb-2 text-xs text-muted-foreground">Newest vs oldest of the {results.length} selected tests</p>
       <table className="w-full min-w-lg text-left text-sm">
         <thead>
-          <tr className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+          <tr className="text-[10px] text-muted-foreground">
             <th className="pb-2 pr-2 font-medium">When</th>
             <th className="pb-2 pr-2 font-medium">Down</th>
             <th className="pb-2 pr-2 font-medium">Up</th>
@@ -235,7 +235,7 @@ function CompareTable({ results, unit }: { results: SpeedTestResult[]; unit: Spe
 function ChangeChip({ label, change }: { label: string; change: { text: string; className: string } }) {
   return (
     <div className="rounded-lg border border-border/70 px-2 py-1.5">
-      <p className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground">{label}</p>
+      <p className="text-xs text-muted-foreground">{label}</p>
       <p className={`tabular-nums font-medium ${change.className}`}>{change.text}</p>
     </div>
   )
@@ -258,7 +258,7 @@ function HistoryMetric({
         <Icon className="h-3.5 w-3.5 text-accent" />
         <span className="text-xs text-muted-foreground">{label}</span>
       </div>
-      <p className="text-lg font-bold tabular-nums sm:text-xl">
+      <p className="text-lg font-medium tabular-nums sm:text-xl">
         {value}
         <span className="ml-1 text-xs font-normal text-muted-foreground">{unit}</span>
       </p>

@@ -61,12 +61,6 @@ export const renderResultCardBlob = async (input: ResultCardInput): Promise<Blob
   ctx.fillStyle = BG
   ctx.fillRect(0, 0, SIZE, SIZE)
 
-  const glow = ctx.createRadialGradient(SIZE / 2, 80, 20, SIZE / 2, 80, 520)
-  glow.addColorStop(0, "rgba(64, 220, 214, 0.22)")
-  glow.addColorStop(1, "rgba(64, 220, 214, 0)")
-  ctx.fillStyle = glow
-  ctx.fillRect(0, 0, SIZE, 640)
-
   const icon = await loadIcon()
   if (icon) ctx.drawImage(icon, 72, 64, 88, 88)
 
